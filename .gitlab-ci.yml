@@ -1,0 +1,38 @@
+stages:
+  - test
+  - build
+  - deploy
+
+.retry-once:
+  retry:
+    max: 1
+    when: script_failure
+
+.docker-build:
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+  after_script:
+    - docker logout ${CI_REGISTRY}
+  script:
+    - docker pull ${CI_REGISTRY_IMAGE}:latest || true
+    - >-
+      docker build
+      --cache-from ${CI_REGISTRY_IMAGE}:latest
+      -t ${CI_REGISTRY_IMAGE}:latest
+      -t ${CI_REGISTRY_IMAGE}:${DOCKER_IMAGE_TAG}
+      .
+    - docker push ${CI_REGISTRY_IMAGE}:${DOCKER_IMAGE_TAG}
+    - docker push ${CI_REGISTRY_IMAGE}:latest
+
+build-image:
+  extends:
+    - .docker-build
+    - .retry-once
+  stage: build
+  only:
+    - tags
+  variables:
+    DOCKER_IMAGE_TAG:  ${CI_COMMIT_REF_NAME}
